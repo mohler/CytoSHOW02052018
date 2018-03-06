@@ -7,16 +7,19 @@ import ij.ImagePlus;
 import ij.ImageStack;
 import ij.Menus;
 import ij.Prefs;
+import ij.VirtualStack;
 import ij.WindowManager;
 import ij.io.FileSaver;
 import ij.macro.Interpreter;
 import ij.measure.Calibration;
 import ij.plugin.Colors;
+import ij.plugin.MultiFileInfoVirtualStack;
 import ij.plugin.frame.Channels;
 import ij.plugin.frame.RoiManager;
 
 import java.awt.BorderLayout;
 import java.awt.Button;
+import java.awt.Checkbox;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.ComponentOrientation;
@@ -45,6 +48,8 @@ import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
 import java.awt.event.FocusEvent;
 import java.awt.event.FocusListener;
+import java.awt.event.ItemEvent;
+import java.awt.event.ItemListener;
 import java.awt.event.MouseWheelEvent;
 import java.awt.event.MouseWheelListener;
 import java.awt.event.WindowEvent;
@@ -54,6 +59,7 @@ import java.awt.event.WindowStateListener;
 import javax.swing.Icon;
 import javax.swing.ImageIcon;
 import javax.swing.JButton;
+import javax.swing.JCheckBox;
 import javax.swing.JComponent;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
@@ -135,6 +141,7 @@ public class ImageWindow extends JFrame implements FocusListener, WindowListener
 	public JButton sketchVVButton;
 	private JButton flattenTagsButton;
 	public JButton tagsButton;
+
 	
 	public ImageWindow(String title) {
 		super(title);
@@ -263,6 +270,7 @@ public class ImageWindow extends JFrame implements FocusListener, WindowListener
 		overheadPanel.setLayout(new GridLayout(1, 1));
 		
 		toolbar = new Toolbar();
+		Toolbar.setInstance(toolbar);
 		toolbar.installBuiltinTool("LUT Menu");
 		toolbar.installBuiltinTool("Stacks Menu");
 		toolbar.installBuiltinTool("Developer Menu");
@@ -275,6 +283,7 @@ public class ImageWindow extends JFrame implements FocusListener, WindowListener
 //		overheadScrollPane.add(overheadPanel);
 
 		this.add(overheadPanel, BorderLayout.NORTH);
+//		Toolbar.setInstance(ij.toolbar);
 	}
 
 	public void addCommandButtons(ImagePlus imp) throws HeadlessException {
@@ -452,6 +461,20 @@ public class ImageWindow extends JFrame implements FocusListener, WindowListener
 		fspc.gridy = y++;
 		fspc.weighty = 0.5;
 		fspc.fill = GridBagConstraints.BOTH;
+		
+		if(imp.getStack() instanceof VirtualStack) {
+			JButton edgeButton = new JButton();
+			edgeButton.setActionCommand("Edges");
+			edgeButton.setName("Edges");
+			edgeButton.setToolTipText("Find Edges of Image Features");
+			edgeButton.setIcon(new ImageIcon(ImageWindow.class.getResource("images/Edges.png")));
+			edgeButton.addActionListener(ij);
+			viewButtonPanel.add(edgeButton, fspc);
+			fspc.gridy = y++;
+			fspc.weighty = 0.5;
+			fspc.fill = GridBagConstraints.BOTH;
+		}
+		
 		JButton displayButton = new JButton();
 		displayButton.setActionCommand("Adjust Display Contrast...");
 		displayButton.setName("Adjust Display Contrast...");
@@ -1223,6 +1246,27 @@ public class ImageWindow extends JFrame implements FocusListener, WindowListener
 						+overheadPanel.getHeight();
 		imp.getWindow().setSize(ic.dstWidth+padH, ic.dstHeight+padV);
 	}
+
+	public void itemStateChanged(ItemEvent e) {
+		if (e.getStateChange() == ItemEvent.SELECTED) {
+			imp.getStack().setEdges(true);
+			imp.setPosition(imp.getChannel(), imp.getSlice(), imp.getFrame()+1);
+			imp.setPosition(imp.getChannel(), imp.getSlice(), imp.getFrame()-1);
+		}else {
+			imp.getStack().setEdges(false);
+			imp.setPosition(imp.getChannel(), imp.getSlice(), imp.getFrame()+1);
+			imp.setPosition(imp.getChannel(), imp.getSlice(), imp.getFrame()-1);
+		}
+
+	}
+
+	public void actionPerformed(ActionEvent e) {
+		if (e.getActionCommand() == "Edges") {
+			imp.getStack().setEdges(!imp.getStack().isEdges());
+		}
+	}
+
+
 
 	
 } //class ImageWindow

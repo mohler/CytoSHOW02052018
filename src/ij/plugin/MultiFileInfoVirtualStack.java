@@ -8,7 +8,6 @@ import ij.gui.*;
 import ij.io.*;
 
 import java.awt.*;
-
 import java.io.*;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
@@ -87,7 +86,10 @@ public class MultiFileInfoVirtualStack extends VirtualStack implements PlugIn {
 		dir = "";
 		if (!argFile.exists() || !argFile.isDirectory()) {
 			dir = IJ.getDirectory("Select Directory of TIFFs");
-			keyString = IJ.getString("Subdirectory Name Key String?", "Deconvolution");
+			String defaultKey = "Deconvolution";
+			if (dir.replace(File.separator, "/").matches(".*/Proj[XY]_Decon-Fuse.*/"))
+				defaultKey = "Color";
+			keyString = IJ.getString("Subdirectory Name Key String?", defaultKey);
 		}
 		else
 			dir = arg;
@@ -411,7 +413,7 @@ public class MultiFileInfoVirtualStack extends VirtualStack implements PlugIn {
 				fivImpZero.getTitle().replaceAll("\\d+\\.", "\\."), this);
 		fivImpZero.flush();
 		imp.setOpenAsHyperStack(true);			
-		int cztDims = cDim*zDim*tDim;
+		int cztDims = cDim*zDim*fivStacks.size();
 		int impSize = imp.getStackSize()*vDim;
 		if (cztDims!= impSize) {
 			if (cztDims > impSize) {
@@ -502,7 +504,6 @@ public class MultiFileInfoVirtualStack extends VirtualStack implements PlugIn {
 		where 1<=n<=nImages. Returns null if the stack is empty.
 	*/
 	public ImageProcessor getProcessor(int n) {
-		//IJ.log("n= "+n);
 		if (n<1 || n>nImages) {
 			IJ.runMacro("waitForUser(\""+n+"\");");
 			return fivStacks.get(0).getProcessor(1);
@@ -512,6 +513,7 @@ public class MultiFileInfoVirtualStack extends VirtualStack implements PlugIn {
 			
 		stackNumber = 0;
 		sliceNumber = 1;
+		int  vSliceNumber = 0;
 		int total=0;
 				
 		if (dimOrder.toLowerCase().matches("xy.*czt")) {
@@ -522,8 +524,7 @@ public class MultiFileInfoVirtualStack extends VirtualStack implements PlugIn {
 			}
 			n=n+adjN;
 		}
-		//IJ.log("n now= "+n);
-
+		
 		while (n > total) {
 			total = total + fivStacks.get(stackNumber).getSize()*(dimOrder.toLowerCase().matches(".*splitc.*")?2:1);
 			stackNumber++;
@@ -531,36 +532,56 @@ public class MultiFileInfoVirtualStack extends VirtualStack implements PlugIn {
 				
 		stackNumber--;
 
-		sliceNumber = (n) % (fivStacks.get(stackNumber).getSize()*(dimOrder.toLowerCase().matches(".*splitc.*")?2:1));
+		sliceNumber = 1+(n) % (fivStacks.get(stackNumber).getSize()*(dimOrder.toLowerCase().matches(".*splitc.*")?2:1));
 		if (dimOrder.toLowerCase().matches(".*splitc.*")) {
 			sliceNumber = (sliceNumber/2);
 		}
-		
+
 		
 		ImageProcessor ip = null;
 		if (dimOrder == "xyczt") {
-			int  vSliceNumber = (sliceNumber)+(isViewB?fivStacks.get(stackNumber).getSize()/vDim:0);
-//			while (vSliceNumber>fivStacks.get(stackNumber).getSize()) {
-//				vSliceNumber = vSliceNumber-fivStacks.get(stackNumber).getSize();
-//				stackNumber++;
-//			}
-			initiateStack(stackNumber, vSliceNumber);
-			ip = fivStacks.get(stackNumber).getProcessor(vSliceNumber);
-		}
-		if (dimOrder.toLowerCase().matches(".*split.*c.*")) {
-//			stackNumber=0;
-			int dX = 0;
-			int dY = 0;
-			
-			int  vSliceNumber = (sliceNumber)+(isViewB?zDim*(dimOrder.toLowerCase().matches(".*split.*c.*")?2:1):0);
-			
-			while (vSliceNumber>fivStacks.get(stackNumber).getSize()) {
+			vSliceNumber = (sliceNumber)+(isViewB?fivStacks.get(stackNumber).getSize()/vDim:0);
+			//ADJUSTMENTS BELOW DEAL WITH CALLING RG CHANNELS CORRECTLY
+			//I DO NOT FULLY UNDERSTAND HOW OR WHY IT WORKS!!!???
+			if (vSliceNumber%2 == 0) {
+				vSliceNumber = vSliceNumber-1;
+			} else {
+				vSliceNumber = vSliceNumber-1;
+			}
+
+			if (vSliceNumber>fivStacks.get(stackNumber).getSize()) {
 				vSliceNumber = vSliceNumber-fivStacks.get(stackNumber).getSize();
 				stackNumber++;
 			}
 			initiateStack(stackNumber, vSliceNumber);
 			ip = fivStacks.get(stackNumber).getProcessor(vSliceNumber);
-			//IJ.log(" slice# "+sliceNumber+" stack# "+stackNumber+" vslice# "+vSliceNumber);
+		}
+		if (dimOrder.toLowerCase().matches(".*split.*c.*")) {
+
+			int dX = 0;
+			int dY = 0;
+			
+			 vSliceNumber = (sliceNumber)+(isViewB?zDim*(cDim/2)*(dimOrder.toLowerCase().matches(".*splitsequentialc.*")?2:1):0);
+			
+			
+		//ADJUSTMENTS BELOW DEAL WITH CALLING C1 AND C4 FOR CSM MODE SWITCH TO JUST 2 MAIN RG CHANNELS
+		//I DO NOT FULLY UNDERSTAND HOW OR WHY IT WORKS!!!???
+			if (dimOrder.toLowerCase().matches(".*splitsequentialc.*")) {
+				if (vSliceNumber%2 == 0) {
+					vSliceNumber = vSliceNumber-1;
+				} else {
+					vSliceNumber = vSliceNumber-1;
+				}
+			}
+
+			if (vSliceNumber>fivStacks.get(stackNumber).getSize()) {
+				vSliceNumber = vSliceNumber-fivStacks.get(stackNumber).getSize();
+				stackNumber++;
+			}
+
+			initiateStack(stackNumber, vSliceNumber);
+			ip = fivStacks.get(stackNumber).getProcessor(vSliceNumber);
+			
 			ip.setInterpolationMethod(ImageProcessor.BICUBIC);
 			if (this.getOwnerImps() != null && this.getOwnerImps().size() > 0 && this.getOwnerImps().get(0) != null) {
 				ip.translate(skewXperZ*(this.getOwnerImps().get(this.getOwnerImps().size()-1).getSlice()-1-this.getOwnerImps().get(this.getOwnerImps().size()-1).getNSlices()/2), skewYperZ*(this.getOwnerImps().get(this.getOwnerImps().size()-1).getSlice()-1-this.getOwnerImps().get(this.getOwnerImps().size()-1).getNSlices()/2));
@@ -577,8 +598,8 @@ public class MultiFileInfoVirtualStack extends VirtualStack implements PlugIn {
 				ip.setRoi(xOri, yOri, 512, 512);
 			} else if (ip.getWidth()==1536) //Yale splitview setup
 				{
-				dX=isViewB?3:0;
-				dY=isViewB?-2:-2;
+				dX=isViewB?2:5;
+				dY=isViewB?7:2;
 				int xOri = 0+((0+(n+1)%2)*(1024));
 				int yOri = 0+((1-(n+1)%2)*(0));
 				ip.setRoi(xOri, yOri, 512, 512);
@@ -622,7 +643,42 @@ public class MultiFileInfoVirtualStack extends VirtualStack implements PlugIn {
 		} else {
 			ip.translate(skewXperZ*(n-1), skewYperZ*(n-1));
 		}
+		
+		if (dimOrder.toLowerCase().matches(".*splitsequentialc.*") && n%cDim == 1) {
+			ImageProcessor nextIP = fivStacks.get(stackNumber).getProcessor(vSliceNumber+1);
+			int dX=0;
+			int dY=0;
+			if (nextIP.getWidth()==1536) //Yale splitview setup
+			{
+				dX=isViewB?2:5;
+				dY=isViewB?7:2;
+				int xOri = 1024;
+				int yOri = 0;
+				ip.setRoi(xOri, yOri, 512, 512);
+			}
+			nextIP = nextIP.crop();
+			nextIP.translate((1-n%2)*dX, (1-n%2)*dY);
+			ImageProcessor rip1= null;
+			ImageProcessor rip2= null;
+			if (ip instanceof ByteProcessor && nextIP instanceof ByteProcessor) {
+				rip1 = ((ByteProcessor) ip).convertToFloat();
+				rip2 = ((ByteProcessor) nextIP).convertToFloat();
+			} else if (ip instanceof ShortProcessor && nextIP instanceof ShortProcessor) {
+				rip1 = ((ShortProcessor) ip).convertToFloat();
+				rip2 = ((ShortProcessor) nextIP).convertToFloat();
+			}
+			if (rip1!=null && rip2!=null) {
+				rip1.copyBits(rip2, 0, 0, Blitter.DIVIDE);
+				rip1.setMinAndMax(0, 255);
+				ip = rip1.convertToShort(true);
+			}
+		}
+		
+		
 //		ip.setMinAndMax(min, max);
+		if (edges) {
+			ip.findEdges();
+		}
 		return ip;
 	 }
 
